@@ -1,14 +1,10 @@
 # 醫師病房值班排班系統（Flask 版）
-
+**AI做的，方便管理故上傳
 ## 安裝
-```bash
-pip install -r requirements.txt
-```
+點選VENVset.bat 設定虛擬機和安裝flask, taiwan holiday
 
 ## 啟動
-```bash
-python app.py
-```
+點選_windows.bat
 
 開啟瀏覽器進入：
 ```text
