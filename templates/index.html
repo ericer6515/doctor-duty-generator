@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>醫師病房值班排班系統</title>
+  <style>
+    :root{--bg:#f4f7fb;--card:#fff;--line:#d8e0ea;--text:#1e293b;--muted:#64748b;--primary:#0f766e;--primary2:#115e59;--weekend:#e8f1ff;--holiday:#fde8e8;--off:#f1f5f9;--doctor:#ecfeff;--danger:#b91c1c}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
+    header{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:5}
+    h1{margin:0;font-size:20px}.sub{font-size:13px;opacity:.92;margin-top:4px}
+    .wrap{max-width:1440px;margin:0 auto;padding:16px}.grid{display:grid;grid-template-columns:380px 1fr;gap:16px}@media(max-width:980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+    .card h2{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:16px}.section{padding:14px 16px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    input,select,button{font:inherit} input,select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+    button{border:none;border-radius:10px;padding:9px 12px;background:var(--primary);color:#fff;cursor:pointer} button.secondary{background:#64748b} button.danger{background:var(--danger)}
+    .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;background:#f8fafc;border:1px solid var(--line);border-radius:999px;font-size:13px;margin:4px 6px 0 0}.small{font-size:12px;color:var(--muted)}
+    .toolbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}
+    .calendar{width:100%;border-collapse:collapse;table-layout:fixed}.calendar th,.calendar td{border:1px solid var(--line)} .calendar th{padding:8px 4px;background:#f8fafc;font-size:12px}
+    .calendar td{height:98px;vertical-align:top;padding:4px}.calendar td.weekend{background:var(--weekend)}.calendar td.holiday{background:var(--holiday)}.calendar td.off{background:var(--off)}
+    .dnum{font-size:12px;font-weight:700}.doctor{margin-top:6px;padding:6px;border-radius:8px;background:var(--doctor);font-size:13px;min-height:32px}.meta{font-size:11px;color:var(--muted);line-height:1.35;margin-top:4px}
+    .ward-block{margin-bottom:18px}.ward-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .ok{color:#166534}.warn{color:#92400e}.danger-t{color:#b91c1c}
+  </style>
+</head>
+<body>
+<header>
+  <h1>醫師病房值班排班系統</h1>
+  <div class="sub">Flask + Python 核心演算法；繁體中文介面；開啟時預設下個月</div>
+</header>
+<div class="wrap">
+  <div class="grid">
+    <aside class="card">
+      <h2>設定</h2>
+      <div class="section row">
+        <label>年份</label><select id="year"></select>
+        <label>月份</label><select id="month"></select>
+        <button id="reloadMonth" class="secondary">跳到下個月</button>
+      </div>
+      <div class="section">
+        <div class="row">
+          <input id="doctorName" placeholder="醫師姓名" />
+          <input id="doctorTarget" type="number" min="0" placeholder="總班數" style="width:100px" />
+          <button id="addDoctor">新增醫師</button>
+        </div>
+        <div id="doctorList" style="margin-top:8px"></div>
+      </div>
+      <div class="section">
+        <div class="row">
+          <input id="wardName" placeholder="病房名稱" />
+          <button id="addWard">新增病房</button>
+        </div>
+        <div id="wardList" style="margin-top:8px"></div>
+      </div>
+      <div class="section">
+        <div class="row">
+          <select id="mode">
+            <option value="doctorOff">醫師特休</option>
+            <option value="wardOff">病房停班</option>
+            <option value="holiday">手動假日</option>
+          </select>
+          <select id="target"></select>
+          <input id="dateStart" type="date" /> 到 <input id="dateEnd" type="date" /> 或多日：<input id="dateMulti" type="text" placeholder="例如 2026-04-01,2026-04-05" />
+          <input id="holidayName" placeholder="假日名稱" />
+          <button id="addRule">新增</button>
+        </div>
+        <div id="summary" class="small" style="margin-top:8px"></div>
+      </div>
+      <div class="section">
+        <div class="small" style="margin-bottom:6px">全院「不能同一天值班」組別（例如同組、師徒等）</div>
+        <div class="row">
+          <select id="pairA"></select>
+          <span>與</span>
+          <select id="pairB"></select>
+          <button id="addPair" class="secondary">加入限制</button>
+        </div>
+        <div id="pairList" class="small" style="margin-top:8px"></div>
+      </div>
+      <div class="section">
+        <div class="row">
+          <button id="runBtn">自動排班</button>
+          <button id="clearBtn" class="danger">清除結果</button>
+        </div>
+        <div id="stats" class="small" style="margin-top:10px"></div>
+      </div>
+    </aside>
+    <main class="card">
+      <div class="toolbar">
+        <div><strong id="titleMonth"></strong><div class="small">每個病房分開呈現，並顯示週末、假日、特休與停班資訊</div></div>
+        <div class="small"><span style="background:var(--holiday);padding:4px 8px;border-radius:999px">假日</span> <span style="background:var(--weekend);padding:4px 8px;border-radius:999px">週末</span> <span style="background:var(--off);padding:4px 8px;border-radius:999px">停班</span></div>
+      </div>
+      <div class="section" id="calendars"></div>
+    </main>
+  </div>
+</div>
+<script>
+const state = {
+  doctors:[
+    {id:'D001',name:'PGY1',target_shifts:8},
+    {id:'D002',name:'PGY2',target_shifts:8},
+    {id:'D003',name:'PGY3',target_shifts:8},
+    {id:'D004',name:'PGY4',target_shifts:8},
+  ],
+  wards:[
+    {id:'W001',name:'7B9A'},
+    {id:'W002',name:'7A10A11A'},
+    {id:'W003',name:'6AB5C'},
+  ],
+  doctor_off:{D001:[],D002:[],D003:[],D004:[]},
+  ward_off:{W001:[],W002:[],W003:[]},
+  manual_holidays:{},
+  fixed_assignments:{},
+  forbidden_pairs:[], // {a:doctorId, b:doctorId}
+  result:null,
+  year:null,
+  month:null,
+};
+
+async function initMonth(){
+  const r=await fetch('/api/next-month');
+  const j=await r.json();
+  state.year=j.year; state.month=j.month;
+  fillYM();
+  await refreshHolidayBase();
+  renderAll();
+}
+function fillYM(){
+  const ys=document.getElementById('year');
+  const ms=document.getElementById('month');
+  ys.innerHTML=''; ms.innerHTML='';
+  for(let y=2024;y<=2032;y++){
+    const o=document.createElement('option');
+    o.value=y; o.textContent=`${y} 年`;
+    if(y===state.year) o.selected=true;
+    ys.appendChild(o);
+  }
+  for(let m=1;m<=12;m++){
+    const o=document.createElement('option');
+    o.value=m; o.textContent=`${m} 月`;
+    if(m===state.month) o.selected=true;
+    ms.appendChild(o);
+  }
+}
+function dateStr(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function firstWeekday(y,m){ return new Date(y,m-1,1).getDay(); }
+async function refreshHolidayBase(){
+  const r=await fetch('/api/holidays',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:state.year,month:state.month})});
+  state.month_meta=(await r.json()).month_meta;
+}
+function holidayName(iso){ const found=(state.month_meta||[]).find(x=>x.date===iso); return found?.holiday_name || state.manual_holidays[iso] || null; }
+function isWeekend(iso){ const found=(state.month_meta||[]).find(x=>x.date===iso); return !!found?.weekend; }
+
+function renderPairSelectors(){
+  const aSel=document.getElementById('pairA');
+  const bSel=document.getElementById('pairB');
+  aSel.innerHTML=''; bSel.innerHTML='';
+  state.doctors.forEach(d=>{
+    const o1=document.createElement('option'); o1.value=d.id; o1.textContent=d.name; aSel.appendChild(o1);
+    const o2=document.createElement('option'); o2.value=d.id; o2.textContent=d.name; bSel.appendChild(o2);
+  });
+}
+
+function renderPairs(){
+  const wrap=document.getElementById('pairList');
+  if(!state.forbidden_pairs.length){ wrap.textContent='尚未設定組別'; return; }
+  wrap.innerHTML='';
+  state.forbidden_pairs.forEach((p,idx)=>{
+    const aName = doctorName(p.a) || p.a;
+    const bName = doctorName(p.b) || p.b;
+    const div=document.createElement('div');
+    div.className='small';
+    div.style.marginTop = '2px';
+    div.innerHTML = `${idx+1}. ${aName} 與 ${bName} 同日禁止值班 <button style="margin-left:4px;background:none;color:#b91c1c;padding:0;border:none;cursor:pointer" onclick="removePair(${idx})">移除</button>`;
+    wrap.appendChild(div);
+  });
+}
+
+function renderLists(){
+  const dl=document.getElementById('doctorList');
+  dl.innerHTML='';
+  state.doctors.forEach(d=>{
+    const offCount=(state.doctor_off[d.id]||[]).filter(x=>x.startsWith(`${state.year}-${String(state.month).padStart(2,'0')}-`)).length;
+    const assigned = state.result ? (state.result.doctor_shift_count[d.id]||0):0;
+    const span=document.createElement('div');
+    span.className='pill';
+    span.innerHTML=`<span>${d.name}${d.target_shifts!=null?`（目標 ${d.target_shifts} 班）`:''}</span><span class="small">已排 ${assigned}｜特休 ${offCount}</span><button onclick="delDoctor('${d.id}')" style="background:none;color:#b91c1c;padding:0">✕</button>`;
+    dl.appendChild(span);
+  });
+  const wl=document.getElementById('wardList');
+  wl.innerHTML='';
+  state.wards.forEach(w=>{
+    const span=document.createElement('div');
+    span.className='pill';
+    span.innerHTML=`<span>${w.name}</span><button onclick="delWard('${w.id}')" style="background:none;color:#b91c1c;padding:0">✕</button>`;
+    wl.appendChild(span);
+  });
+  const target=document.getElementById('target');
+  target.innerHTML='';
+  const mode=document.getElementById('mode').value;
+  if(mode==='doctorOff'){
+    state.doctors.forEach(d=>{
+      const o=document.createElement('option'); o.value=d.id; o.textContent=d.name; target.appendChild(o);
+    });
+  } else if(mode==='wardOff'){
+    state.wards.forEach(w=>{
+      const o=document.createElement('option'); o.value=w.id; o.textContent=w.name; target.appendChild(o);
+    });
+  } else {
+    const o=document.createElement('option'); o.value='holiday'; o.textContent='國定假日'; target.appendChild(o);
+  }
+  renderPairSelectors();
+  renderPairs();
+}
+
+function delDoctor(id){
+  state.doctors=state.doctors.filter(x=>x.id!==id);
+  delete state.doctor_off[id];
+  // 同時移除涉及此醫師的 forbidden pair
+  state.forbidden_pairs = state.forbidden_pairs.filter(p=>p.a!==id && p.b!==id);
+  renderAll();
+}
+function delWard(id){
+  state.wards=state.wards.filter(x=>x.id!==id);
+  delete state.ward_off[id];
+  renderAll();
+}
+function removePair(idx){
+  state.forbidden_pairs.splice(idx,1);
+  renderAll();
+}
+
+function renderSummary(){
+  const ym=`${state.year}-${String(state.month).padStart(2,'0')}-`;
+  const parts=[];
+  state.doctors.forEach(d=>{
+    const a=(state.doctor_off[d.id]||[]).filter(x=>x.startsWith(ym)).map(x=>x.slice(-2));
+    if(a.length) parts.push(`${d.name} 特休 ${a.join('、')} 日`);
+  });
+  state.wards.forEach(w=>{
+    const a=(state.ward_off[w.id]||[]).filter(x=>x.startsWith(ym)).map(x=>x.slice(-2));
+    if(a.length) parts.push(`${w.name} 停班 ${a.join('、')} 日`);
+  });
+  const hs=Object.entries(state.manual_holidays).filter(([k])=>k.startsWith(ym)).map(([k,v])=>`${k.slice(-2)} 日 ${v}`);
+  if(hs.length) parts.push(`手動假日：${hs.join('、')}`);
+  document.getElementById('summary').textContent=parts.length?parts.join('｜'):'本月尚未設定特休、停班或手動假日';
+}
+
+function doctorName(id){ return state.doctors.find(x=>x.id===id)?.name || ''; }
+
+function renderCalendars(){
+  document.getElementById('titleMonth').textContent=`${state.year} 年 ${state.month} 月`;
+  const wrap=document.getElementById('calendars');
+  wrap.innerHTML='';
+  const total=daysInMonth(state.year,state.month);
+  const first=firstWeekday(state.year,state.month);
+  state.wards.forEach(ward=>{
+    const block=document.createElement('div');
+    block.className='ward-block';
+    block.innerHTML=`<div class="ward-head"><h3 style="margin:0">${ward.name}</h3><div class="small">病房獨立月曆</div></div>`;
+    const table=document.createElement('table');
+    table.className='calendar';
+    table.innerHTML='<thead><tr><th>日</th><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th><th>六</th></tr></thead>';
+    const tb=document.createElement('tbody');
+    let day=1;
+    for(let r=0;r<6;r++){
+      const tr=document.createElement('tr');
+      for(let c=0;c<7;c++){
+        const td=document.createElement('td');
+        if((r===0&&c<first)||day>total){ tr.appendChild(td); continue; }
+        const iso=dateStr(state.year,state.month,day);
+        const h=holidayName(iso);
+        if(isWeekend(iso)) td.classList.add('weekend');
+        if(h) td.classList.add('holiday');
+        if((state.ward_off[ward.id]||[]).includes(iso)) td.classList.add('off');
+        const assigned=state.result?.assignments?.[ward.id]?.[day] || null;
+        const offDoctors=state.doctors.filter(d=>(state.doctor_off[d.id]||[]).includes(iso)).map(x=>x.name);
+        td.innerHTML=`<div class="dnum">${day}</div><div class="doctor">${(state.ward_off[ward.id]||[]).includes(iso)?'本日停班':(assigned?doctorName(assigned):'未排班')}</div><div class="meta">${h?`假日：${h}<br>`:''}${offDoctors.length?`特休：${offDoctors.join('、')}`:''}</div>`;
+        tr.appendChild(td);
+        day++;
+      }
+      tb.appendChild(tr);
+      if(day>total) break;
+    }
+    table.appendChild(tb);
+    block.appendChild(table);
+    wrap.appendChild(block);
+  });
+}
+
+function renderStats(){
+  const s=document.getElementById('stats');
+  if(!state.result){ s.textContent='尚未產生排班'; return; }
+  const rows=state.doctors.map(d=>`${d.name}：${state.result.doctor_shift_count[d.id]||0} 班`);
+  const u=(state.result.unfilled||[]).length;
+  s.innerHTML = rows.join('｜') + (u?`<br><span class="warn">未排滿 ${u} 格</span>`:'<br><span class="ok">全部已排班</span>');
+}
+
+function renderAll(){ fillYM(); renderLists(); renderSummary(); renderCalendars(); renderStats(); }
+
+async function runSchedule(){
+  const payload={
+    year:state.year,
+    month:state.month,
+    doctors:state.doctors,
+    wards:state.wards,
+    doctor_off:state.doctor_off,
+    ward_off:state.ward_off,
+    manual_holidays:state.manual_holidays,
+    fixed_assignments:state.fixed_assignments,
+    forbidden_pairs:state.forbidden_pairs,
+  };
+  const r=await fetch('/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  state.result=await r.json();
+  renderAll();
+}
+
+// 事件綁定
+
+document.getElementById('addDoctor').onclick=()=>{
+  const name=document.getElementById('doctorName').value.trim(); if(!name) return;
+  const targetRaw=document.getElementById('doctorTarget').value; const target_shifts=targetRaw?Number(targetRaw):null;
+  const id='D'+Math.random().toString(36).slice(2,8);
+  state.doctors.push({id,name,target_shifts}); state.doctor_off[id]=[];
+  document.getElementById('doctorName').value=''; document.getElementById('doctorTarget').value='';
+  renderAll();
+};
+
+document.getElementById('addWard').onclick=()=>{
+  const name=document.getElementById('wardName').value.trim(); if(!name) return;
+  const id='W'+Math.random().toString(36).slice(2,8);
+  state.wards.push({id,name}); state.ward_off[id]=[];
+  document.getElementById('wardName').value='';
+  renderAll();
+};
+
+document.getElementById('mode').onchange=()=>renderAll();
+
+document.getElementById('addRule').onclick=()=>{
+  const mode=document.getElementById('mode').value;
+  const target=document.getElementById('target').value;
+  const start=document.getElementById('dateStart').value;
+  const endRaw=document.getElementById('dateEnd').value;
+  const multiRaw=document.getElementById('dateMulti').value.trim();
+
+  const dates=[];
+
+  if(mode==='doctorOff' && multiRaw){
+    // 多個不連續日期，逗號分隔
+    multiRaw.split(',').forEach(part=>{
+      const iso=part.trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){
+        if(!dates.includes(iso)) dates.push(iso);
+      }
+    });
+    if(!dates.length) return;
+  } else {
+    // 使用起訖日期範圍
+    if(!start) return;
+    const startDate=new Date(start);
+    const endDate=endRaw?new Date(endRaw):new Date(start);
+    if(endDate < startDate) return;
+    let cur=new Date(startDate);
+    while(cur <= endDate){
+      const y=cur.getFullYear();
+      const m=String(cur.getMonth()+1).padStart(2,'0');
+      const d=String(cur.getDate()).padStart(2,'0');
+      dates.push(`${y}-${m}-${d}`);
+      cur.setDate(cur.getDate()+1);
+    }
+  }
+
+  if(mode==='doctorOff'){
+    state.doctor_off[target]=state.doctor_off[target]||[];
+    dates.forEach(iso=>{
+      const arr=state.doctor_off[target];
+      const idx=arr.indexOf(iso);
+      if(idx===-1){
+        // 若尚未存在，加入特休
+        arr.push(iso);
+      } else {
+        // 若已存在，再按一次則取消特休
+        arr.splice(idx,1);
+      }
+    });
+  } else if(mode==='wardOff'){
+    // 病房停班：只用範圍，不看 multiRaw
+    state.ward_off[target]=state.ward_off[target]||[];
+    dates.forEach(iso=>{
+      if(!state.ward_off[target].includes(iso)) state.ward_off[target].push(iso);
+    });
+  } else {
+    // 手動假日只吃起始日
+    const iso=start;
+    if(!iso) return;
+    const name=document.getElementById('holidayName').value.trim()||'手動假日';
+    state.manual_holidays[iso]=name;
+  }
+  renderAll();
+};
+
+document.getElementById('addPair').onclick=()=>{
+  const a=document.getElementById('pairA').value;
+  const b=document.getElementById('pairB').value;
+  if(!a || !b || a===b) return;
+  if(!state.forbidden_pairs.some(p=>(p.a===a && p.b===b)||(p.a===b && p.b===a))){
+    state.forbidden_pairs.push({a,b});
+  }
+  renderAll();
+};
+
+document.getElementById('runBtn').onclick=runSchedule;
+document.getElementById('clearBtn').onclick=()=>{ state.result=null; renderAll(); };
+document.getElementById('reloadMonth').onclick=async()=>{ await initMonth(); };
+document.getElementById('year').onchange=async e=>{ state.year=Number(e.target.value); await refreshHolidayBase(); renderAll(); };
+document.getElementById('month').onchange=async e=>{ state.month=Number(e.target.value); await refreshHolidayBase(); renderAll(); };
+
+initMonth();
+</script>
+</body>
+</html>
